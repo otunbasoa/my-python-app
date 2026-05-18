@@ -1,0 +1,109 @@
+name: End-to-End AWS Automation via OIDC
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: python-app-repo
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Lint Python
+        run: ruff check .
+
+      - name: Run security checks
+        run: bandit -r main.py
+
+      - name: Run tests
+        run: pytest
+
+      - name: Build container image
+        run: docker build -t ${{ env.ECR_REPOSITORY }}:${{ github.sha }} .
+
+  deploy:
+    needs: quality
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          audience: amazonaws.com
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./terraform
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        working-directory: ./terraform
+
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: ./terraform
+
+      - name: Ensure ECR repository exists
+        run: terraform apply -target=module.ecr -auto-approve
+        working-directory: ./terraform
+
+      - name: Read ECR repository URL
+        id: ecr
+        run: echo "repository_url=$(terraform output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
+        working-directory: ./terraform
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REPOSITORY_URL: ${{ steps.ecr.outputs.repository_url }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REPOSITORY_URL:$IMAGE_TAG .
+          docker push $ECR_REPOSITORY_URL:$IMAGE_TAG
+          echo "image=$ECR_REPOSITORY_URL:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -var "container_image=${{ steps.build-image.outputs.image }}"
+        working-directory: ./terraform
