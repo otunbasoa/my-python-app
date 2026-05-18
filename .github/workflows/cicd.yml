@@ -5,6 +5,18 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Manual operation to run"
+        required: true
+        type: choice
+        options:
+          - destroy
+      confirm_destroy:
+        description: "Type destroy to confirm infrastructure teardown"
+        required: true
+        type: string
 
 env:
   AWS_REGION: us-east-1
@@ -19,14 +31,15 @@ permissions:
   contents: read
 
 jobs:
-  quality:
+  test:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -45,24 +58,30 @@ jobs:
       - name: Run tests
         run: pytest
 
+  build-image:
+    needs: test
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
       - name: Build container image
         run: docker build -t ${{ env.ECR_REPOSITORY }}:${{ github.sha }} .
 
   deploy:
-    needs: quality
+    needs: build-image
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-          audience: amazonaws.com
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -106,4 +125,30 @@ jobs:
 
       - name: Terraform Apply
         run: terraform apply -auto-approve -var "container_image=${{ steps.build-image.outputs.image }}"
+        working-directory: ./terraform
+
+  cleanup:
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy' && inputs.confirm_destroy == 'destroy'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./terraform
+
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve -var "ecr_repository_force_delete=true"
         working-directory: ./terraform

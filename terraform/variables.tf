@@ -27,3 +27,9 @@ variable "container_image" {
   description = "Fully qualified container image URI to deploy"
   default     = ""
 }
+
+variable "ecr_repository_force_delete" {
+  type        = bool
+  description = "Allow Terraform destroy to delete the ECR repository even when it contains images"
+  default     = false
+}

@@ -5,7 +5,7 @@ module "ecr" {
   repository_name = "${var.app_name}-repo"
 
   repository_image_tag_mutability = "IMMUTABLE"
-  repository_force_delete         = false
+  repository_force_delete         = var.ecr_repository_force_delete
   repository_image_scan_on_push   = true
 
   tags = {
