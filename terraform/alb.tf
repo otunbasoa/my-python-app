@@ -6,22 +6,20 @@ module "alb" {
   vpc_id  = module.vpc.vpc_id
   subnets = module.vpc.public_subnets
 
-  # Security Group rules allowing public HTTP traffic from the internet
   security_group_ingress_rules = {
     all_http = {
       from_port   = 80
       to_port     = 80
-      protocol    = "tcp"
-      cidr_blocks = ["0.0.0.0/0"]
+      ip_protocol = "tcp"
+      description = "HTTP web traffic"
+      cidr_ipv4   = "0.0.0.0/0"
     }
   }
 
   security_group_egress_rules = {
     all_egress = {
-      from_port   = 0
-      to_port     = 0
-      protocol    = "-1"
-      cidr_blocks = ["0.0.0.0/0"]
+      ip_protocol = "-1"
+      cidr_ipv4   = "0.0.0.0/0"
     }
   }
 
@@ -37,9 +35,10 @@ module "alb" {
 
   target_groups = {
     python-app-tg = {
-      backend_protocol              = "HTTP"
-      backend_port                  = 8000
+      protocol                      = "HTTP"
+      port                          = 8000
       target_type                   = "ip"
+      create_attachment             = false
       deregistration_delay          = 5
       load_balancing_algorithm_type = "round_robin"
 
