@@ -1,7 +1,7 @@
 # Terraform Backend Bootstrap
 
-This stack creates the S3 bucket and DynamoDB table used by the main Terraform
-configuration for remote state and state locking.
+This stack creates the S3 bucket used by the main Terraform configuration for
+remote state. State locking is handled by Terraform's S3 native lockfile support.
 
 Run this stack once before running `terraform init` in the parent `terraform`
 directory:
