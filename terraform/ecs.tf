@@ -1,5 +1,5 @@
 locals {
-  container_image = var.container_image != "" ? var.container_image : "${module.ecr.repository_url}:latest"
+  container_image = var.container_image != "" ? var.container_image : "${data.aws_ecr_repository.app.repository_url}:latest"
 }
 
 module "ecs" {

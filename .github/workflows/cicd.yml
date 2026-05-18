@@ -100,14 +100,14 @@ jobs:
         run: terraform validate
         working-directory: ./terraform
 
-      - name: Ensure ECR repository exists
-        run: terraform apply -target=module.ecr -auto-approve
-        working-directory: ./terraform
-
       - name: Read ECR repository URL
         id: ecr
-        run: echo "repository_url=$(terraform output -raw ecr_repository_url)" >> "$GITHUB_OUTPUT"
-        working-directory: ./terraform
+        run: |
+          repository_url=$(aws ecr describe-repositories \
+            --repository-names "$ECR_REPOSITORY" \
+            --query 'repositories[0].repositoryUri' \
+            --output text)
+          echo "repository_url=$repository_url" >> "$GITHUB_OUTPUT"
 
       - name: Log in to Amazon ECR
         id: login-ecr
@@ -150,5 +150,5 @@ jobs:
         working-directory: ./terraform
 
       - name: Terraform Destroy
-        run: terraform destroy -auto-approve -var "ecr_repository_force_delete=true"
+        run: terraform destroy -auto-approve
         working-directory: ./terraform

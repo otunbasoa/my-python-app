@@ -41,3 +41,18 @@ resource "aws_s3_bucket_ownership_controls" "terraform_state" {
     object_ownership = "BucketOwnerEnforced"
   }
 }
+
+resource "aws_ecr_repository" "app" {
+  name                 = "${var.app_name}-repo"
+  image_tag_mutability = "IMMUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+    Purpose     = "Application container images"
+  }
+}

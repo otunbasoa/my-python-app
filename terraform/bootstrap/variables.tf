@@ -9,3 +9,15 @@ variable "state_bucket_name" {
   description = "S3 bucket name for Terraform remote state"
   default     = "python-app-production-terraform-state"
 }
+
+variable "app_name" {
+  type        = string
+  description = "Application name used for foundational resources"
+  default     = "python-app"
+}
+
+variable "environment" {
+  type        = string
+  description = "Deployment environment name"
+  default     = "production"
+}
